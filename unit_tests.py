@@ -1,11 +1,18 @@
+import sys
+import random
 import unittest
 import collections
 import itertools
 from card_combinations import CardCombination, CardCombinationsGenerator
 from game_elements import Card, ALL_CARDS, MAX_CARDS_PER_HAND
-from game import Slot, GameState, Player
+from game import Slot, GameState, Player, Game
 from proba_engine import ProbaEngine
 from combination_scoring import ScoringScheme
+
+seed = random.randrange(sys.maxsize)
+# seed = 2255843268280832302
+rng = random.Random(seed)
+print("Seed was:", seed)
 
 
 """
@@ -252,7 +259,7 @@ class TestProbaEngine(unittest.TestCase):
         gs.slots[0][0].add(Card("blue", 7))
         player.hand = {Card("blue", 1), Card("blue", 2), Card("blue", 3)}
         comb_probas = pe.combination_probas_from_slot(player, gs, 0)
-        self.assertEqual(len(comb_probas), 1)
+        self.assertEqual(len(comb_probas), 0)
 
         # Color suite is in our hand
         gs = GameState()
@@ -573,7 +580,7 @@ class TestGameState(unittest.TestCase):
 
 TestGameState().test_constructor()
 TestGameState().test_interface()
-"""
+
 
 class TestPlayer(unittest.TestCase):
 
@@ -594,7 +601,7 @@ class TestPlayer(unittest.TestCase):
         comb = CardCombination(Card("blue", 1), Card("green", 2), Card("brown", 9))
         self.assertEqual(player.get_cards_in_hand_from_comb(comb), [Card("brown", 9)])
         comb = CardCombination(Card("green", 1), Card("green", 2), Card("brown", 9))
-        self.assertEqual(player.get_cards_in_hand_from_comb(comb), [Card("brown", 9), Card("green", 1)])
+        self.assertEqual(player.get_cards_in_hand_from_comb(comb), [Card("green", 1), Card("brown", 9)])
 
     def test_get_slots_combs_probas(self):
         player = Player(0)
@@ -640,8 +647,8 @@ class TestPlayer(unittest.TestCase):
         slots_probas = player.get_slots_combs_probas(gs)
         self.assertEqual(slots_probas[2][comb], 1)
 
-        # Slot is full so one combination has probabillity 1
-        self.assertEqual(len(slots_probas[3]), 1)
+        # Slot is full
+        self.assertEqual(len(slots_probas[3]), 0)
 
     def test_get_non_locking_best_playable_combinations(self):
         slot_comb_probas = [
@@ -666,6 +673,7 @@ class TestPlayer(unittest.TestCase):
 
     # TODO: more thorough tests
     def test_get_best_move_from_combs(self):
+
         player = Player(0)
         player.hand.add(Card("blue", 2))
         slot_comb_best_probas = [
@@ -673,23 +681,45 @@ class TestPlayer(unittest.TestCase):
             (2, CardCombination(Card("blue", 2), Card("green", 2), Card("yellow", 2)), 0.65, True),
             (5, CardCombination(Card("blue", 3), Card("green", 3), Card("purple", 3)), 0.6, True)
         ]
-        slot_comb_all_probas = [
-            (1, CardCombination(Card("red", 2), Card("red", 3), Card("red", 4)), 0.8, False),
+        slot_comb_all_probas = sorted(slot_comb_best_probas + [
+            (1, CardCombination(Card("red", 2), Card("red", 3), Card("red", 4)), 0.5, False),
             (2, CardCombination(Card("purple", 2), Card("green", 2), Card("yellow", 2)), 0.6, False),
             (5, CardCombination(Card("red", 3), Card("green", 3), Card("yellow", 3)), 0.4, True)
-        ]
+        ], key=lambda x: x[2], reverse=True)
 
-        # Only choice
-        slot, card = player.get_best_move_from_combs(slot_comb_best_probas, slot_comb_all_probas)
-        self.assertEqual(slot, 1)
-        self.assertEqual(card, Card("blue", 2))
+        # Only one choice: playing that one card is the best move
+        # slot, card = player.get_best_move_from_combs(slot_comb_best_probas,
+        #                                             slot_comb_all_probas +
+        #                                             slot_comb_best_probas)
+        # self.assertEqual(slot, 1)
+        # self.assertEqual(card, Card("blue", 2))
 
-        # Two choices but we favor the card which kills the combination with
-        # lowest slot win probability
+        # Two cards results in a best move for a single slot: favor the card
+        # which kills the combination with lowest slot win probability
         player.hand.add(Card("blue", 3))
-        slot, card = player.get_best_move_from_combs(slot_comb_best_probas, slot_comb_all_probas)
+        slot, card = player.get_best_move_from_combs(slot_comb_best_probas,
+                                                     slot_comb_all_probas +
+                                                     slot_comb_best_probas)
         self.assertEqual(slot, 1)
         self.assertEqual(card, Card("blue", 3))
+
+        # Same thing but bets moves are from different slots
+        player = Player(0)
+        player.hand.add(Card("blue", 2))
+        player.hand.add(Card("green", 3))
+        slot_comb_best_probas = [
+            (0, CardCombination(Card("blue", 1), Card("blue", 2), Card("blue", 3)), 0.7, True),
+            (2, CardCombination(Card("green", 4), Card("green", 5), Card("green", 6)), 0.65, True),
+            (9, CardCombination(Card("red", 2), Card("blue", 2), Card("yellow", 2)), 0.2, True)
+        ]
+        slot_comb_all_probas =  sorted(slot_comb_best_probas + [
+            (8, CardCombination(Card("red", 3), Card("green", 3), Card("purple", 3)), 0.3, False),
+        ], key=lambda x: x[2], reverse=True)
+        slot, card = player.get_best_move_from_combs(slot_comb_best_probas,
+                                                     slot_comb_all_probas +
+                                                     slot_comb_best_probas)
+        self.assertEqual(slot, 0)
+        self.assertEqual(card, Card("blue", 2))
 
     def test_get_best_comb_probas(self):
         player = Player(0)
@@ -779,10 +809,17 @@ class TestPlayer(unittest.TestCase):
 
 
 
-# TestPlayer().test_constructor()
-# TestPlayer().test_get_cards_in_hand_from_comb()
-# TestPlayer().test_get_slots_combs_probas()
+TestPlayer().test_constructor()
+TestPlayer().test_get_cards_in_hand_from_comb()
+TestPlayer().test_get_slots_combs_probas()
 TestPlayer().test_get_non_locking_best_playable_combinations()
 TestPlayer().test_get_best_move_from_combs()
 TestPlayer().test_get_best_comb_probas()
 TestPlayer().test_make_move()
+"""
+
+# game = Game(Player(0), Player(1))
+game = Game(Player(0, ScoringScheme((1, 2, 3, 6, 10))),
+            Player(1, ScoringScheme((1, 2, 3, 6, 10))))
+game.play()
+

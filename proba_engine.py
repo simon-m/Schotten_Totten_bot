@@ -100,7 +100,9 @@ class ProbaEngine:
                     else:
                         proba *= ProbaEngine.deck_proba(game_state.deck_size)
 
-            comb_probas[comb] = proba
+            if proba != 0:
+                comb_probas[comb] = proba
+
         return comb_probas
 
     @staticmethod
@@ -138,8 +140,11 @@ class ProbaEngine:
             # all  possible combinations using the two cards in that slot
             allowed_combs = ccg.get_combinations_from_pair_of_cards(card1, card2)
         elif len(c_slot) == 3:
-            (c1, c2, c3) = c_slot
-            return {CardCombination(c1, c2, c3): 1}
+            if for_opponent:
+                (c1, c2, c3) = c_slot
+                return {CardCombination(c1, c2, c3): 1}
+            else:
+                return {}
         else:
             raise ValueError("ProbaEngine.combination_proba_started_slot:" +
                              "slot must contain between 0 and 2 cards." +
