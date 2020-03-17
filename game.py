@@ -9,14 +9,63 @@ from card_combinations import CardCombinationsGenerator, CardCombination
 from game_elements import ALL_CARDS, Card
 
 
+class HumanPlayer:
+    def __init__(self, index=0):
+        self.index = index
+        self.opponent_index = 1 if self.index == 0 else 0
+        self.hand = set()
+
+    def make_move(self, game_state):
+        cards_list = []
+        for i, card in enumerate(self.hand):
+            print("{}: {}".format(i + 1, card))
+            cards_list.append(card)
+
+        card_error_message = "Should be a number between 1 and {}".format(len(self.hand))
+
+        valid_input = False
+        card_index = None
+        while not valid_input:
+            try:
+                user_input = input("Choose your card: ")
+                card_index = int(user_input)
+            except ValueError:
+                print(card_error_message)
+
+            assert card_index is not None
+            if card_index < 1 or card_index > len(self.hand):
+                print(card_error_message)
+            else:
+                valid_input = True
+
+        slot_error_message = "Should be a number between 1 and 9"
+
+        valid_input = False
+        slot_index = None
+        while not valid_input:
+            try:
+                user_input = input("Choose your slot: ")
+                slot_index = int(user_input)
+            except ValueError:
+                print(slot_error_message)
+
+            if slot_index < 1 or slot_index > 9:
+                print(slot_error_message)
+            else:
+                valid_input = True
+
+        return slot_index - 1, cards_list[card_index - 1]
+
+
 class Player:
-    def __init__(self, index=0, combination_scorer=ScoringScheme()):
+    def __init__(self, index=0, combination_scorer=ScoringScheme(), search_depth=20):
         self.index = index
         self.opponent_index = 1 if self.index == 0 else 0
         self.hand = set()
         ccg = CardCombinationsGenerator()
         cs = combination_scorer
         self.combination_scores = {comb: cs.get_score(comb) for comb in ccg.get_all_combinations()}
+        self.search_depth = search_depth
 
     def get_cards_in_hand_from_comb(self, m_comb):
         # cards_in_hand = set()
@@ -50,13 +99,13 @@ class Player:
 
         return slots_combs_probas
 
-    def get_best_comb_probas(self, slot_probas, depth):
+    def get_best_comb_probas(self, slot_probas):
 
         comb_list = []
         proba_array = np.ndarray(shape=(len(slot_probas)))
         expectation_array = np.ndarray(shape=(len(slot_probas)))
 
-        if len(slot_probas) <= depth:
+        if len(slot_probas) <= self.search_depth:
             res = []
             for (m_comb, m_proba) in slot_probas.items():
                 res.append((m_comb, m_proba))
@@ -67,7 +116,7 @@ class Player:
             proba_array[i] = m_proba
             expectation_array[i] = m_proba * self.combination_scores[m_comb]
 
-        best_indexes = np.argpartition(-expectation_array, depth)[:depth]
+        best_indexes = np.argpartition(-expectation_array, self.search_depth)[:self.search_depth]
         res = []
         for i in best_indexes:
             res.append((comb_list[i], proba_array[i]))
@@ -204,7 +253,7 @@ class Player:
         card, slot, _, _ = max(move_slot_win_proba, key=lambda x: x[2])
         return slot, card
 
-    def make_move(self, game_state, depth=20):
+    def make_move(self, game_state):
         # For each slot, the probability of possible combinations
         # (with proba non zero)
         my_slots_probas = self.get_slots_combs_probas(game_state)
@@ -218,8 +267,8 @@ class Player:
 
         # For each pair of slots (mine vs the opponent's)
         for slot_index, (m_slot_probas, o_slot_probas) in enumerate(zip(my_slots_probas, op_slots_probas)):
-            m_slot_best_comb_probas = self.get_best_comb_probas(m_slot_probas, depth)
-            o_slot_best_comb_probas = self.get_best_comb_probas(o_slot_probas, depth)
+            m_slot_best_comb_probas = self.get_best_comb_probas(m_slot_probas)
+            o_slot_best_comb_probas = self.get_best_comb_probas(o_slot_probas)
 
             """
             if slot_index <= 1:
@@ -376,7 +425,7 @@ class Game:
         if self.game_state.deck_size > 0:
             self.players[player_index].hand.add(self.game_state.draw_deck())
 
-    def game_over(self):
+    def game_winner(self):
         player_n_slot_won = [0, 0]
         for i, (slot0, slot1) in enumerate(zip(self.game_state.slots[0], self.game_state.slots[1])):
             if len(slot0) == 3 and len(slot1) == 3:
@@ -406,24 +455,25 @@ class Game:
         else:
             return self.first_to_finish_slot[slot_index]
 
-    def display_slot(self, slot):
+    @staticmethod
+    def display_slot(slot_index, slot):
         if len(slot) == 3:
             (c1, c2, c3,) = slot
             comb = CardCombination(c1, c2, c3)
-            print("  - {}".format(comb))
+            print("  - {}: {}".format(slot_index, comb))
         else:
-            print("  - {}".format(slot))
+            print("  - {}: {}".format(slot_index, slot))
 
     def display_game(self):
         print("deck_size: {}".format(self.game_state.deck_size))
         print("--")
         print("p0 hand: {}".format(self.players[0].hand))
-        for slot in self.game_state.slots[0]:
-            self.display_slot(slot)
+        for i, slot in enumerate(self.game_state.slots[0]):
+            Game.display_slot(i, slot)
         print("--")
         print("p1 hand: {}".format(self.players[1].hand))
-        for slot in self.game_state.slots[1]:
-            self.display_slot(slot)
+        for i, slot in enumerate(self.game_state.slots[1]):
+            Game.display_slot(i, slot)
 
     def play(self):
         self.display_game()
@@ -431,9 +481,10 @@ class Game:
         game_over = None
         while game_over is None:
             self.player_turn(0)
+            self.display_game()
             self.player_turn(1)
             self.display_game()
-            game_over = self.game_over()
+            game_over = self.game_winner()
             print("")
 
         print("Winner: {}".format(self.game_over()))
@@ -442,7 +493,7 @@ class Game:
             if len(slot0) == 3 and len(slot1) == 3:
                 slot_winner = self.get_slot_winner(i)
             print("Winner for slot {}: player {}".format(i, slot_winner))
-            print(self.display_slot(slot0))
-            print(self.display_slot(slot1))
+            print(Game.display_slot(slot0))
+            print(Game.display_slot(slot1))
             print("--")
 

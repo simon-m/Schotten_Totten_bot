@@ -5,7 +5,7 @@ import collections
 import itertools
 from card_combinations import CardCombination, CardCombinationsGenerator
 from game_elements import Card, ALL_CARDS, MAX_CARDS_PER_HAND
-from game import Slot, GameState, Player, Game
+from game import Slot, GameState, HumanPlayer, Player, Game
 from proba_engine import ProbaEngine
 from combination_scoring import ScoringScheme
 
@@ -818,8 +818,12 @@ TestPlayer().test_get_best_comb_probas()
 TestPlayer().test_make_move()
 """
 
+# TODO: test HumanPlayer
+# TODO: rename and debug Player
 # game = Game(Player(0), Player(1))
+# game = Game(Player(0, ScoringScheme((1, 2, 3, 6, 10))),
+#             Player(1, ScoringScheme((1, 2, 3, 6, 10))))
 game = Game(Player(0, ScoringScheme((1, 2, 3, 6, 10))),
-            Player(1, ScoringScheme((1, 2, 3, 6, 10))))
-game.play()
+            HumanPlayer(1))
 
+game.play()
