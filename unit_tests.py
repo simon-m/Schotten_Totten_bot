@@ -1,5 +1,4 @@
 import sys
-import random
 import unittest
 import collections
 import itertools
@@ -8,11 +7,6 @@ from game_elements import Card, ALL_CARDS, MAX_CARDS_PER_HAND
 from game import Slot, GameState, HumanPlayer, Player, Game
 from proba_engine import ProbaEngine
 from combination_scoring import ScoringScheme
-
-seed = random.randrange(sys.maxsize)
-# seed = 2255843268280832302
-rng = random.Random(seed)
-print("Seed was:", seed)
 
 
 """
@@ -231,11 +225,11 @@ class TestCardCombinationsGenerator(unittest.TestCase):
         self.assertEqual(counter[3], 160)
         # Colors without a 1: (8 choose 3 ) - 6 (color suites) per color
         self.assertEqual(counter[2], 300)
-        # Suites without a 1: 6 * 5 * 5 (two first position with different colors) +
-        # 6 *1 * 5 (two first positions with the same color) = 210 for each
+        # Suites without a 1: 6 * 5 * 6 (two first position with different colors) +
+        # 6 * 1 * 5 (two first positions with the same color) = 210 for each
         # starting number
         self.assertEqual(counter[1], 1260)
-        # Sums without a 1: 17296 - 36 - 160 - 300 - 1260
+        # Sums without a 1: 17296 (3 choose 48) - 36 - 160 - 300 - 1260
         self.assertEqual(counter[0], 15540)
 
 
@@ -823,7 +817,7 @@ TestPlayer().test_make_move()
 # game = Game(Player(0), Player(1))
 # game = Game(Player(0, ScoringScheme((1, 2, 3, 6, 10))),
 #             Player(1, ScoringScheme((1, 2, 3, 6, 10))))
-game = Game(Player(0, ScoringScheme((1, 2, 3, 6, 10))),
+game = Game(Player(0, ScoringScheme((1, 16, 50, 422, 543))),
             HumanPlayer(1))
 
 game.play()

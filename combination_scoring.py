@@ -21,33 +21,33 @@ class ScoringScheme:
     @staticmethod
     def get_base_score(comb):
         # Sum: score is the combination value (sum of
-        # numbers) rebased to 0 for the smallest.
-        # Min value: 0 (1+1+2 - 4); max value: 22 (9+9+8 - 4)
+        # numbers) rebased to 1 for the smallest.
+        # Min value: 1 (1+1+2 - 3); max value: 23 (9+9+8 - 3)
         if comb.category == 0:
-            return comb.value - 4
+            return comb.value - 3
 
         # Suite: score is the max value of the sum
         # plus value of the combination (the smallest number
         # of the suite).
-        # Min value: 22 + 1 = 23; max value = 22 + 7 = 29
+        # Min value: 23 + 1 = 24; max value = 23 + 7 = 30
         if comb.category == 1:
-            return 22 + comb.value
+            return 23 + comb.value
 
         # Color: score is the max value of the suite plus
         # the combination value (sum of numbers) rebased to 1.
-        # Min value: 29 + 1+2+4 - 6 = 30; max value: 29 + 9+8+6 - 6 = 46
+        # Min value: 30 + 1+2+4 - 6 = 31; max value: 30 + 9+8+6 - 6 = 47
         if comb.category == 2:
-            return 29 + comb.value - 6
+            return 24 + comb.value
 
         # Set: score is the max value of the color plus
         # the value of the combination (number).
-        # Min value: 46 + 1 = 47; max value: 46 + 9 = 55
+        # Min value: 47 + 1 = 48; max value: 47 + 9 = 56
         if comb.category == 3:
-            return 46 + comb.value
+            return 47 + comb.value
 
         # Color suite: score is the max value of the set
         # plus de la value of the combination (smallest
         # number).
-        # Min value: 55 + 1 = 56; max value: 55 + 7 = 62
+        # Min value: 56 + 1 = 57 max value: 56 + 7 = 63
         if comb.category == 4:
-            return 55 + comb.value
+            return 56 + comb.value

@@ -9,6 +9,14 @@ from card_combinations import CardCombinationsGenerator, CardCombination
 from game_elements import ALL_CARDS, Card
 
 
+DEBUG =True
+# seed = random.randrange(sys.maxsize)
+seed = 850806568202399433
+rng = random.Random(seed)
+print("Seed was:", seed)
+
+
+
 class HumanPlayer:
     def __init__(self, index=0):
         self.index = index
@@ -83,7 +91,7 @@ class Player:
             slots = game_state.slots[self.index]
 
         slots_combs_probas = []
-        # Probas are the same for the empty slots so no need to compute *
+        # Probas are the same for the empty slots so no need to compute
         # them more than once
         empty_slots_probas = None
         for i in range(len(slots)):
@@ -119,8 +127,8 @@ class Player:
         best_indexes = np.argpartition(-expectation_array, self.search_depth)[:self.search_depth]
         res = []
         for i in best_indexes:
-            res.append((comb_list[i], proba_array[i]))
-        return res
+            res.append((comb_list[i], proba_array[i], expectation_array[i]))
+        return sorted(res, key=lambda x: x[2], reverse=True)
 
     @staticmethod
     def get_non_locking_best_playable_combinations(all_comb_win_probas):
@@ -197,7 +205,7 @@ class Player:
             print("DEBUG")
             print(best_moves)
             print(slot_comb_by_playable_card)
-            card = random.choice(list(slot_comb_by_playable_card.keys()))
+            card = rng.choice(list(slot_comb_by_playable_card.keys()))
             return best_moves[0][0], card
 
 
@@ -270,28 +278,27 @@ class Player:
             m_slot_best_comb_probas = self.get_best_comb_probas(m_slot_probas)
             o_slot_best_comb_probas = self.get_best_comb_probas(o_slot_probas)
 
-            """
-            if slot_index <= 1:
+            if DEBUG:
                 print("SLOT N°{}".format(slot_index))
-                for c, p in o_slot_best_comb_probas:
-                    print(c, p)
+                for c, p, e in m_slot_best_comb_probas:
+                    print(c, p, e)
                 print("")
 
-                for c, p in m_slot_best_comb_probas:
-                    print(c, p)
+                for c, p, e in o_slot_best_comb_probas:
+                    print(c, p, e)
                 print("")
-            """
 
             # for m_comb, m_proba in m_slot_probas.items():
-            for m_comb, m_proba in m_slot_best_comb_probas:
+            for m_comb, m_proba, m_exp in m_slot_best_comb_probas:
                 # If at least one card of the combination is
                 # in our hand
                 is_playable = True if len(self.get_cards_in_hand_from_comb(m_comb)) > 0 else False
 
                 # Proba for the combination to win in this slot
+                # FIXME: current computations do not result in good behaviour
                 slot_win_score = 0
                 # for (o_comb, o_proba) in o_slot_probas.items():
-                for (o_comb, o_proba) in o_slot_best_comb_probas:
+                for o_comb, o_proba, m_exp in o_slot_best_comb_probas:
                     m_score = self.combination_scores[m_comb]
                     o_score = self.combination_scores[o_comb]
                     if m_score > o_score:
@@ -300,32 +307,32 @@ class Player:
                         # The adversary finished the same combination before us so we
                         # cannot win this slot
                         if game_state.slots[self.opponent_index][slot_index] == 3:
-                            pass
+                            slot_win_score -= m_proba * o_proba
                         else:
-                            slot_win_score += m_proba * (1 - o_proba)
+                            pass
+                    else:
+                        slot_win_score -= m_proba * o_proba
 
                 all_comb_win_probas.append((slot_index, m_comb, slot_win_score, is_playable))
 
-            """
-            if slot_index <= 1:
-                print("all_comb_win_probas")
-                for elt in sorted(all_comb_win_probas, key=lambda x: x[2], reverse=True):
-                    print(elt)
-            print("")
-            """
+
+        if DEBUG:
+            print("all_comb_win_probas")
+            for elt in sorted(all_comb_win_probas, key=lambda x: x[2], reverse=True):
+                print(elt)
+        print("")
+
 
         # Playable combinations, provided they do not block a slot having a non-playable
         # combination with higher win probability. Sorted by slot win probability.
-
         all_comb_win_probas.sort(key=lambda x: x[2], reverse=True)
         best_combs = Player.get_non_locking_best_playable_combinations(all_comb_win_probas)
 
-        """
-        print("Non locking")
-        for elt in sorted(best_combs, key=lambda x: x[2], reverse=True):
-            print(elt)
-        print("")
-        """
+        if DEBUG:
+            print("Non locking")
+            for elt in sorted(best_combs, key=lambda x: x[2], reverse=True):
+                print(elt)
+            print("")
 
         slot_to_play, card_to_play = self.get_best_move_from_combs(best_combs, all_comb_win_probas)
         return slot_to_play, card_to_play
@@ -405,7 +412,7 @@ class Game:
         self.first_to_finish_slot = [None for _ in range(9)]
 
         cards = list(ALL_CARDS)
-        random.shuffle(cards)
+        rng.shuffle(cards)
         for i in range(6):
             self.players[0].hand.add(cards.pop())
             self.players[1].hand.add(cards.pop())
@@ -460,9 +467,9 @@ class Game:
         if len(slot) == 3:
             (c1, c2, c3,) = slot
             comb = CardCombination(c1, c2, c3)
-            print("  - {}: {}".format(slot_index, comb))
+            print("  - {}: {}".format(slot_index + 1, comb))
         else:
-            print("  - {}: {}".format(slot_index, slot))
+            print("  - {}: {}".format(slot_index + 1, slot))
 
     def display_game(self):
         print("deck_size: {}".format(self.game_state.deck_size))
