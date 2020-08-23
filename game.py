@@ -66,6 +66,297 @@ class HumanPlayer:
 
 
 class Player:
+    def __init__(self, index=0):
+        self.index = index
+        self.opponent_index = 1 if self.index == 0 else 0
+        self.hand = set()
+        self.ccg = CardCombinationsGenerator()
+
+    def make_move(self, game_state):
+        moves_scores = self.get_moves_scores(game_state)
+        # Moves with exactly one combination with no counter move. Priority.
+        zero_counter_eq_1 = []
+        # Moves with one or more combination with no counter move. Good moves.
+        zero_counter_gt_1 = []
+        # Other moves to be sorted according to their score.
+        zero_counter_0 = []
+        for move, scores in moves_scores:
+            if scores[0] == 1:
+                zero_counter_eq_1.append((move, scores[1]))
+            elif scores[0] > 1:
+                zero_counter_gt_1.append((move, scores[1]))
+            else:
+                zero_counter_0.append((move, scores[1]))
+
+        if len(zero_counter_eq_1) == 1:
+            return zero_counter_eq_1[0][0]
+
+        if len(zero_counter_eq_1) > 1:
+            # Sort by decreasing score
+            seq = sorted(zero_counter_eq_1, key = lambda x: -x[1])
+            return seq[0][0]
+
+        if len(zero_counter_gt_1) == 1:
+            return zero_counter_gt_1[0][0]
+
+        if len(zero_counter_gt_1) > 1:
+            # Sort by decreasing score
+            sgt = sorted(zero_counter_gt_1, key=lambda x: -x[1])
+            return sgt[0][0]
+
+        s0 = sorted(zero_counter_0, key=lambda x: -x[1])
+        return s0[0][0]
+
+    def get_moves_scores(self, game_state):
+        # caching for empty slots
+        empty_slot_scores = None
+
+        moves_scores = {}
+        for my_slot, opp_slot in zip(game_state.slots[self.index],
+                                    game_state.slots[self.opponent_index]):
+            if len(my_slot == 0) and empty_slot_scores is not None:
+                moves_scores = empty_slot_scores
+            else:
+                for card in self.hand:
+                    moves_scores[(card, my_slot)] = self.get_move_scores(card, my_slot, opp_slot, game_state)
+                if len(my_slot == 0):
+                    empty_slot_scores = moves_scores
+
+        return moves_scores
+
+    # TODO: test this
+    def get_move_scores(self, card, my_slot, opp_slot, game_state):
+        # Number of combinations with 0 winning counter combinations
+        n_zero_counter = 0
+        # Sum over possible combinations of the inverse number of
+        # winning counter combinations
+        move_score = 0
+
+        # get playable combinations
+        if len(my_slot) == 0:
+            combs = self.ccg.get_combinations_from_card(card, game_state.played_cards)
+        elif len(my_slot) == 1:
+            slot_card, = my_slot
+            combs = self.ccg.get_combinations_from_pair_of_cards(card, slot_card, game_state.played_cards)
+        elif len(my_slot) == 2:
+            slot_card1, slots_card2, = my_slot
+            combs = [CardCombination(card, slot_card1, slots_card2)]
+        else:
+            assert False
+
+        for comb in combs:
+            comb_score = 0
+            winning_counter_combs = self.get_winning_counter_combs(comb, opp_slot, game_state)
+            # Cannot be beaten
+            if len(winning_counter_combs) == 0:
+                n_zero_counter += 1
+            # Combination with same "power" only count for half
+            for wcc in winning_counter_combs:
+                if wcc == comb:
+                    comb_score += 0.5
+                else:
+                    comb_score += 1
+            move_score += 1 / comb_score
+
+        return n_zero_counter, move_score
+
+    def get_winning_counter_combs(self, comb, opp_slot, game_state):
+
+        if len(opp_slot) == 0:
+            playable_combs = self.ccg.get_all_combinations(game_state.played_cards | set(comb.cards))
+        elif len(opp_slot) == 1:
+            slot_card, = opp_slot
+            playable_combs = self.ccg.get_combinations_from_card(slot_card, game_state.played_cards)
+        elif len(opp_slot) == 2:
+            slot_card1, slot_card2, = opp_slot
+            playable_combs = self.ccg.get_combinations_from_pair_of_cards(slot_card1, slot_card2, game_state.played_cards)
+        else:
+            slot_card1, slot_card2, slot_card3 = opp_slot
+            playable_combs = [CardCombination(slot_card1, slot_card2, slot_card3)]
+
+        winning_counter_combs = set()
+        for counter_comb in playable_combs:
+            if comb < counter_comb or (comb.category == counter_comb.category and
+               comb.value == counter_comb.value):
+                winning_counter_combs.add(counter_comb)
+        return winning_counter_combs
+
+
+class Slot(MutableSet):
+
+    def __init__(self):
+        self.elements = set()
+
+    def add(self, element):
+        if element in self:
+            raise ValueError("Slot.add(): cannot have duplicate elements")
+        if len(self.elements) == 3:
+            raise ValueError("Slot.add(): cannot have more than 3 elements")
+        else:
+            self.elements.add(element)
+
+    def discard(self, element):
+        raise NotImplementedError("Slot.discard(): cannot discard elements")
+
+    def __contains__(self, element):
+        return True if element in self.elements else False
+
+    def __iter__(self):
+        return self.elements.__iter__()
+
+    def __len__(self):
+        return len(self.elements)
+
+    def __repr__(self):
+        return self.elements.__repr__()
+
+    def __str__(self):
+        return self.elements.__str__()
+
+
+class GameState:
+    def __init__(self, deck=None):
+        self._is_init = False
+        # Where players build their combinations
+        self.slots = [[Slot() for _ in range(9)], [Slot() for _ in range(9)]]
+        self.played_cards = set()
+        if deck is None:
+            self.deck = set([])
+        else:
+            self.deck = set(deck)
+
+    def add_to_slot(self, player_index, slot_index, card):
+        self.slots[player_index][slot_index].add(card)
+        self.played_cards.add(card)
+
+    @property
+    def deck(self):
+        raise AttributeError("GameState.deck is private."
+                             "The public interface consists of the "
+                             "deck_size attribute and method draw_deck()")
+
+    @deck.setter
+    def deck(self, deck):
+        if not self._is_init:
+            self._deck = deck
+            self._is_init = True
+        else:
+            raise AttributeError("GameState.deck is private."
+                                 "The public interface consists of the "
+                                 "deck_size attribute and method draw_deck()")
+
+    @property
+    def deck_size(self):
+        return len(self._deck)
+
+    def draw_deck(self):
+        return self._deck.pop()
+
+
+class Game:
+    def __init__(self, player0, player1):
+        self.players = [player0, player1]
+        self.players[0].index = 0
+        self.players[1].index = 1
+        self.first_to_finish_slot = [None for _ in range(9)]
+
+        cards = list(ALL_CARDS)
+        rng.shuffle(cards)
+        for i in range(6):
+            self.players[0].hand.add(cards.pop())
+            self.players[1].hand.add(cards.pop())
+        self.game_state = GameState(cards)
+
+    def player_turn(self, player_index):
+        slot_index, card = self.players[player_index].make_move(self.game_state)
+        assert(card in self.players[player_index].hand)
+
+        self.game_state.add_to_slot(player_index, slot_index, card)
+        if len(self.game_state.slots[player_index][slot_index]) == 3 and \
+                self.first_to_finish_slot[slot_index] is None:
+            self.first_to_finish_slot[slot_index] = player_index
+
+        self.players[player_index].hand.remove(card)
+
+        if self.game_state.deck_size > 0:
+            self.players[player_index].hand.add(self.game_state.draw_deck())
+
+    def game_winner(self):
+        player_n_slot_won = [0, 0]
+        for i, (slot0, slot1) in enumerate(zip(self.game_state.slots[0], self.game_state.slots[1])):
+            if len(slot0) == 3 and len(slot1) == 3:
+                slot_winner = self.get_slot_winner(i)
+                if slot_winner is not None:
+                    player_n_slot_won[slot_winner] += 1
+        if player_n_slot_won[0] == 5:
+            return 0
+        elif player_n_slot_won[1] == 5:
+            return 1
+        else:
+            return None
+
+    def get_slot_winner(self, slot_index):
+        (card1, card2, card3, ) = self.game_state.slots[0][slot_index]
+        p0_comb = CardCombination(card1, card2, card3)
+        (card1, card2, card3, ) = self.game_state.slots[1][slot_index]
+        p1_comb = CardCombination(card1, card2, card3)
+        if p0_comb.category > p1_comb.category:
+            return 0
+        elif p0_comb.category == p1_comb.category and p0_comb.value > p1_comb.value:
+            return 0
+        elif p0_comb.category < p1_comb.category:
+            return 1
+        elif p0_comb.category == p1_comb.category and p0_comb.value < p1_comb.value:
+            return 1
+        else:
+            return self.first_to_finish_slot[slot_index]
+
+    @staticmethod
+    def display_slot(slot_index, slot):
+        if len(slot) == 3:
+            (c1, c2, c3,) = slot
+            comb = CardCombination(c1, c2, c3)
+            print("  - {}: {}".format(slot_index + 1, comb))
+        else:
+            print("  - {}: {}".format(slot_index + 1, slot))
+
+    def display_game(self):
+        print("deck_size: {}".format(self.game_state.deck_size))
+        print("--")
+        print("p0 hand: {}".format(self.players[0].hand))
+        for i, slot in enumerate(self.game_state.slots[0]):
+            Game.display_slot(i, slot)
+        print("--")
+        print("p1 hand: {}".format(self.players[1].hand))
+        for i, slot in enumerate(self.game_state.slots[1]):
+            Game.display_slot(i, slot)
+
+    def play(self):
+        self.display_game()
+        print("")
+        game_over = None
+        while game_over is None:
+            self.player_turn(0)
+            self.display_game()
+            self.player_turn(1)
+            self.display_game()
+            game_over = self.game_winner()
+            print("")
+
+        print("Winner: {}".format(self.game_winner()))
+        for i, (slot0, slot1) in enumerate(zip(self.game_state.slots[0], self.game_state.slots[1])):
+            slot_winner = None
+            if len(slot0) == 3 and len(slot1) == 3:
+                slot_winner = self.get_slot_winner(i)
+            print("Winner for slot {}: player {}".format(i, slot_winner))
+            print(Game.display_slot(i, slot0))
+            print(Game.display_slot(i, slot1))
+            print("--")
+
+
+
+"""
+class Player:
     def __init__(self, index=0, combination_scorer=ScoringScheme(), search_depth=20):
         self.index = index
         self.opponent_index = 1 if self.index == 0 else 0
@@ -336,171 +627,4 @@ class Player:
 
         slot_to_play, card_to_play = self.get_best_move_from_combs(best_combs, all_comb_win_probas)
         return slot_to_play, card_to_play
-
-
-class Slot(MutableSet):
-
-    def __init__(self):
-        self.elements = set()
-
-    def add(self, element):
-        if element in self:
-            raise ValueError("Slot.add(): cannot have duplicate elements")
-        if len(self.elements) == 3:
-            raise ValueError("Slot.add(): cannot have more than 3 elements")
-        else:
-            self.elements.add(element)
-
-    def discard(self, element):
-        raise NotImplementedError("Slot.discard(): cannot discard elements")
-
-    def __contains__(self, element):
-        return True if element in self.elements else False
-
-    def __iter__(self):
-        return self.elements.__iter__()
-
-    def __len__(self):
-        return len(self.elements)
-
-    def __repr__(self):
-        return self.elements.__repr__()
-
-    def __str__(self):
-        return self.elements.__str__()
-
-
-class GameState:
-    def __init__(self, deck=None):
-        self._is_init = False
-        # Where players build their combinations
-        self.slots = [[Slot() for _ in range(9)], [Slot() for _ in range(9)]]
-        if deck is None:
-            self.deck = set([])
-        else:
-            self.deck = set(deck)
-
-    @property
-    def deck(self):
-        raise AttributeError("GameState.deck is private."
-                             "The public interface consists of the "
-                             "deck_size attribute and method draw_deck()")
-
-    @deck.setter
-    def deck(self, deck):
-        if not self._is_init:
-            self._deck = deck
-            self._is_init = True
-        else:
-            raise AttributeError("GameState.deck is private."
-                                 "The public interface consists of the "
-                                 "deck_size attribute and method draw_deck()")
-
-    @property
-    def deck_size(self):
-        return len(self._deck)
-
-    def draw_deck(self):
-        return self._deck.pop()
-
-
-class Game:
-    def __init__(self, player0, player1):
-        self.players = [player0, player1]
-        self.players[0].index = 0
-        self.players[1].index = 1
-        self.first_to_finish_slot = [None for _ in range(9)]
-
-        cards = list(ALL_CARDS)
-        rng.shuffle(cards)
-        for i in range(6):
-            self.players[0].hand.add(cards.pop())
-            self.players[1].hand.add(cards.pop())
-        self.game_state = GameState(cards)
-
-    def player_turn(self, player_index):
-        slot_index, card = self.players[player_index].make_move(self.game_state)
-        assert(card in self.players[player_index].hand)
-
-        self.game_state.slots[player_index][slot_index].add(card)
-        if len(self.game_state.slots[player_index][slot_index]) == 3 and \
-                self.first_to_finish_slot is None:
-            self.first_to_finish_slot = player_index
-
-        self.players[player_index].hand.remove(card)
-
-        if self.game_state.deck_size > 0:
-            self.players[player_index].hand.add(self.game_state.draw_deck())
-
-    def game_winner(self):
-        player_n_slot_won = [0, 0]
-        for i, (slot0, slot1) in enumerate(zip(self.game_state.slots[0], self.game_state.slots[1])):
-            if len(slot0) == 3 and len(slot1) == 3:
-                slot_winner = self.get_slot_winner(i)
-                if slot_winner is not None:
-                    player_n_slot_won[slot_winner] += 1
-        if player_n_slot_won[0] == 5:
-            return 0
-        elif player_n_slot_won[1] == 5:
-            return 1
-        else:
-            return None
-
-    def get_slot_winner(self, slot_index):
-        (card1, card2, card3, ) = self.game_state.slots[0][slot_index]
-        p0_comb = CardCombination(card1, card2, card3)
-        (card1, card2, card3, ) = self.game_state.slots[1][slot_index]
-        p1_comb = CardCombination(card1, card2, card3)
-        if p0_comb.category > p1_comb.category:
-            return 0
-        elif p0_comb.category == p1_comb.category and p0_comb.value > p1_comb.value:
-            return 0
-        elif p0_comb.category < p1_comb.category:
-            return 1
-        elif p0_comb.category == p1_comb.category and p0_comb.value < p1_comb.value:
-            return 1
-        else:
-            return self.first_to_finish_slot[slot_index]
-
-    @staticmethod
-    def display_slot(slot_index, slot):
-        if len(slot) == 3:
-            (c1, c2, c3,) = slot
-            comb = CardCombination(c1, c2, c3)
-            print("  - {}: {}".format(slot_index + 1, comb))
-        else:
-            print("  - {}: {}".format(slot_index + 1, slot))
-
-    def display_game(self):
-        print("deck_size: {}".format(self.game_state.deck_size))
-        print("--")
-        print("p0 hand: {}".format(self.players[0].hand))
-        for i, slot in enumerate(self.game_state.slots[0]):
-            Game.display_slot(i, slot)
-        print("--")
-        print("p1 hand: {}".format(self.players[1].hand))
-        for i, slot in enumerate(self.game_state.slots[1]):
-            Game.display_slot(i, slot)
-
-    def play(self):
-        self.display_game()
-        print("")
-        game_over = None
-        while game_over is None:
-            self.player_turn(0)
-            self.display_game()
-            self.player_turn(1)
-            self.display_game()
-            game_over = self.game_winner()
-            print("")
-
-        print("Winner: {}".format(self.game_over()))
-        for i, (slot0, slot1) in enumerate(zip(self.game_state.slots[0], self.game_state.slots[1])):
-            slot_winner = None
-            if len(slot0) == 3 and len(slot1) == 3:
-                slot_winner = self.get_slot_winner(i)
-            print("Winner for slot {}: player {}".format(i, slot_winner))
-            print(Game.display_slot(slot0))
-            print(Game.display_slot(slot1))
-            print("--")
-
+"""

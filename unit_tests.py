@@ -207,12 +207,16 @@ class TestCardCombinationsGenerator(unittest.TestCase):
                 self.assertEqual(comb_type_dict["Set"], 4)
 
     def test_get_combinations_excluding_cards(self):
-        combs = CardCombinationsGenerator.get_combinations_excluding_cards([])
+        ccg = CardCombinationsGenerator()
+
+        # combs = CardCombinationsGenerator.get_combinations_excluding_cards([])
+        combs = ccg.get_all_combinations([])
         self.assertEqual(len(combs), 24804)
 
         cards = [Card("red", 1), Card("blue", 1), Card("green", 1),
                  Card("yellow", 1), Card("brown", 1), Card("purple", 1)]
-        combs = CardCombinationsGenerator.get_combinations_excluding_cards(cards)
+        # combs = CardCombinationsGenerator.get_combinations_excluding_cards(cards)
+        combs = ccg.get_all_combinations(cards)
         self.assertEqual(len(combs), 17296)
 
         counter = [0, 0, 0, 0, 0]
@@ -571,9 +575,19 @@ class TestGameState(unittest.TestCase):
         self.assertIsInstance(gs.draw_deck(), Card)
         self.assertEqual(gs.deck_size, 53)
 
+    def test_add_to_slot(self):
+        gs = GameState(ALL_CARDS)
+        card = Card("blue", 2)
+        gs.add_to_slot(0, 0, card)
+        played_card, = gs.played_cards
+        self.assertEqual(played_card, Card("blue", 2))
+        slot_card,  = gs.slots[0][0]
+        self.assertEqual(slot_card, Card("blue", 2))
+
 
 TestGameState().test_constructor()
 TestGameState().test_interface()
+TestGameState().test_add_to_slot()
 
 
 class TestPlayer(unittest.TestCase):
@@ -812,12 +826,43 @@ TestPlayer().test_get_best_comb_probas()
 TestPlayer().test_make_move()
 """
 
+
+class TestPlayer(unittest.TestCase):
+    def test_get_winning_counter_combs(self):
+        gs = GameState(ALL_CARDS)
+        gs.slots[1][1].add(Card("blue", 7))
+        gs.slots[1][2].add(Card("red", 7))
+        gs.slots[1][2].add(Card("red", 8))
+        gs.slots[1][3].add(Card("brown", 7))
+        gs.slots[1][3].add(Card("brown", 8))
+        gs.slots[1][3].add(Card("brown", 9))
+
+        player = Player()
+        ccg = CardCombinationsGenerator()
+
+        combs = ccg.get_all_combinations()
+        for comb in combs:
+            # print(comb)
+            for i in reversed(range(4)):
+                cc = player.get_winning_counter_combs(comb, gs.slots[1][i], gs)
+                # print(i, len(cc))
+                for elt in cc:
+                    self.assertTrue(elt.category >= comb.category or
+                                    elt.value >= comb.value)
+
+        # TODO
+        # def test_get_move_scores(self):
+
+
+TestPlayer().test_get_winning_counter_combs()
+
+
 # TODO: test HumanPlayer
 # TODO: rename and debug Player
 # game = Game(Player(0), Player(1))
 # game = Game(Player(0, ScoringScheme((1, 2, 3, 6, 10))),
 #             Player(1, ScoringScheme((1, 2, 3, 6, 10))))
-game = Game(Player(0, ScoringScheme((1, 16, 50, 422, 543))),
-            HumanPlayer(1))
+# game = Game(Player(0, ScoringScheme((1, 16, 50, 422, 543))),
+#             HumanPlayer(1))
 
-game.play()
+# game.play()

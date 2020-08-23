@@ -5,8 +5,8 @@ from game_elements import ALL_CARDS
 
 class CardCombination:
     def __init__(self, card1, card2, card3):
-        assert(card1 != card2)
-        assert(card1 != card3)
+        assert card1 != card2
+        assert card1 != card3
         self.cards = tuple(sorted([card1, card2, card3]))
         self.name = None
         self.category = None
@@ -77,6 +77,11 @@ class CardCombination:
             if c1 != c2:
                 return False
         return True
+        """
+        if self.category == other.category and self.value == other.value:
+            return True
+        return False
+        """
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -87,6 +92,18 @@ class CardCombination:
         if self.category == other.category and self.value < other.value:
             return True
         return False
+
+    """
+    # Not valid for use in sets
+    def __le__(self, other):
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other):
+        return not self.__le__(other)
+
+    def __ge__(self):
+        return not self.__lt__(other)
+    """
 
     def __hash__(self):
         return hash(self.cards)
@@ -106,29 +123,37 @@ class CardCombinationsGenerator:
     def __init__(self):
         self._all_combinations_cache = None
 
-    def get_all_combinations(self):
-        if self._all_combinations_cache is None:
-            self._all_combinations_cache = set()
-            for card1, card2, card3 in itertools.combinations(ALL_CARDS, 3):
-                self._all_combinations_cache.add(CardCombination(card1, card2, card3))
-        return self._all_combinations_cache
+    def get_all_combinations(self, forbidden_cards={}):
+        if len(forbidden_cards) == 0:
+            if self._all_combinations_cache is None:
+                self._all_combinations_cache = set()
+                for card1, card2, card3 in itertools.combinations(ALL_CARDS, 3):
+                    self._all_combinations_cache.add(CardCombination(card1, card2, card3))
+            return self._all_combinations_cache
+        else:
+            allowed_cards = ALL_CARDS - set(forbidden_cards)
+            all_combs = set()
+            for card1, card2, card3 in itertools.combinations(allowed_cards, 3):
+                all_combs.add(CardCombination(card1, card2, card3))
+            return all_combs
 
     @staticmethod
-    def get_combinations_from_card(c_card):
-        allowed_cards = ALL_CARDS - {c_card}
+    def get_combinations_from_card(c_card, forbidden_cards=[]):
+        allowed_cards = ALL_CARDS - {c_card} - set(forbidden_cards)
         all_combs = set()
         for card1, card2 in itertools.combinations(allowed_cards, 2):
             all_combs.add(CardCombination(c_card, card1, card2))
         return all_combs
 
     @staticmethod
-    def get_combinations_from_pair_of_cards(card1, card2):
-        allowed_cards = ALL_CARDS - {card1, card2}
+    def get_combinations_from_pair_of_cards(card1, card2, forbidden_cards=[]):
+        allowed_cards = ALL_CARDS - {card1, card2} - set(forbidden_cards)
         all_combs = set()
         for card in allowed_cards:
             all_combs.add(CardCombination(card1, card2, card))
         return all_combs
 
+    """
     @staticmethod
     def get_combinations_excluding_cards(forbidden_cards):
         allowed_cards = ALL_CARDS - set(forbidden_cards)
@@ -136,3 +161,4 @@ class CardCombinationsGenerator:
         for card1, card2, card3 in itertools.combinations(allowed_cards, 3):
             all_combs.add(CardCombination(card1, card2, card3))
         return all_combs
+    """

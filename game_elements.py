@@ -41,3 +41,4 @@ class Card:
 
 
 ALL_CARDS = {Card(c, n) for c, n in itertools.product(CARD_COLORS, CARD_NUMBERS)}
+
